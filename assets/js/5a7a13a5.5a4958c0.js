@@ -1,0 +1,1 @@
+"use strict";(self.webpackChunkdocs=self.webpackChunkdocs||[]).push([[763],{4410:s=>{s.exports=JSON.parse('{"sourceUrl":"https://github.com/Vel136/Heln/blob/master","baseUrl":"/Heln/","classOrder":[{"section":"API","classes":["Heln"]}],"apiCategories":[]}')}}]);
