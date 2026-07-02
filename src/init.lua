@@ -147,6 +147,22 @@ end
 
 -- ─── Internal: frame composition ─────────────────────────────────────────────
 
+function Controller:_GatherContribution(track, contributions, forceInclude, weightOverride)
+	local rank = priorityRank(track._priority)
+	local weight = weightOverride or track._weightCurrent
+
+	if weight > 0 or forceInclude then
+		for jointName, cframe in track:_EvaluatePose() do
+			local list = contributions[jointName]
+			if not list then
+				list = {}
+				contributions[jointName] = list
+			end
+			table.insert(list, { Priority = rank, Order = track._id, Weight = weight, CFrame = cframe })
+		end
+	end
+end
+
 function Controller:_step(dt)
 	local contributions = {}
 
@@ -179,19 +195,7 @@ function Controller:_step(dt)
 		end
 
 		if track:_IsContributing() or justFinished then
-			local rank = priorityRank(track._priority)
-			local weight = track._weightCurrent
-
-			if weight > 0 or justFinished then
-				for jointName, cframe in track:_EvaluatePose() do
-					local list = contributions[jointName]
-					if not list then
-						list = {}
-						contributions[jointName] = list
-					end
-					table.insert(list, { Priority = rank, Order = track._id, Weight = weight, CFrame = cframe })
-				end
-			end
+			self:_GatherContribution(track, contributions, justFinished)
 		end
 
 		if justFinished then
@@ -207,6 +211,27 @@ function Controller:_step(dt)
 		end
 	end
 
+	self:_ComposeAndWrite(contributions)
+end
+
+function Controller:_WritePoseImmediate(track)
+	if self._tracks[track] then
+		return
+	end
+
+	local contributions = {}
+
+	for otherTrack in pairs(self._tracks) do
+		self:_GatherContribution(otherTrack, contributions, false)
+	end
+
+	local scrubWeight = track._weightCurrent > 0 and track._weightCurrent or (track._weightTarget > 0 and track._weightTarget or 1)
+	self:_GatherContribution(track, contributions, true, scrubWeight)
+
+	self:_ComposeAndWrite(contributions)
+end
+
+function Controller:_ComposeAndWrite(contributions)
 	for jointName, list in pairs(contributions) do
 		table.sort(list, function(a, b)
 			if a.Priority ~= b.Priority then
@@ -275,6 +300,9 @@ local function setTimePosition(proxy, track, time)
 		local events = Proxy._events[proxy]
 		track:_FireMarkersBetween(from, clamped, events.KeyframeReached, events.markerSignals)
 	end
+
+	local rigController = Proxy._rigControllers[proxy]
+	rigController:_WritePoseImmediate(track)
 end
 
 local function setPlaybackType(proxy, track, value)
