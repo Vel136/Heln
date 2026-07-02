@@ -27,6 +27,7 @@ local function buildFromKeyframeSequence(keyframeSequence)
 			CFrame = pose.CFrame,
 			EasingStyle = pose.EasingStyle,
 			EasingDirection = pose.EasingDirection,
+			Weight = pose.Weight,
 		})
 		for _, child in ipairs(pose:GetChildren()) do
 			if child:IsA("Pose") then
@@ -59,6 +60,29 @@ local function buildFromKeyframeSequence(keyframeSequence)
 
 	for _, list in pairs(timelines) do
 		table.sort(list, function(a, b) return a.Time < b.Time end)
+	end
+
+	-- A KeyframeSequence authored in Moon Animator (and the built-in animation editor) nests
+	-- every joint from the root down to whatever was actually posed, just to keep the pose
+	-- tree connected -- those pass-through joints carry Weight = 0 and were never
+	-- intentionally animated (see docs/notes on Pose.Weight). If Heln kept them as real
+	-- contributions, an unrelated clip sharing no *intentional* joints with another track
+	-- (e.g. a Fire clip that only means to move the gun) would still silently override that
+	-- other track's pose for those pass-through joints -- wrong under the same-priority
+	-- weighted-average AND under a higher-priority full override, either way clobbering an
+	-- unrelated animation on the same rig. Drop timelines that never carry nonzero weight
+	-- anywhere in the clip; they're not a real intent to animate that joint.
+	for jointName, list in pairs(timelines) do
+		local everNonzero = false
+		for _, entry in ipairs(list) do
+			if entry.Weight > 0 then
+				everNonzero = true
+				break
+			end
+		end
+		if not everNonzero then
+			timelines[jointName] = nil
+		end
 	end
 
 	return timelines, keyframeMarkers, length
